@@ -76,7 +76,7 @@ func RunNodeHost(ctx context.Context, opts NodeHostRunOptions) error {
 	if port == 0 {
 		port = 18789
 	}
-	wsURL := fmt.Sprintf("%s://%s:%d", scheme, host, port)
+	wsURL := fmt.Sprintf("%s://%s:%d/ws", scheme, host, port)
 
 	pathEnv := ensureNodePathEnv()
 	skillBinsFetch := func(_ context.Context) ([]string, error) {
@@ -158,9 +158,9 @@ func connectAndRun(ctx context.Context, wsURL string, creds GatewayCredentials, 
 
 	client := &wsClient{conn: conn, mu: sync.Mutex{}}
 
-	// Send connect frame — auth happens here, not via HTTP headers.
-	connectFrame := map[string]any{
-		"type":              "connect",
+	// Send connect request — gateway expects type="req" with method="connect".
+	connectParams := map[string]any{
+		"token":             creds.Token,
 		"instanceId":        nodeID,
 		"clientName":        "node-host",
 		"clientDisplayName": displayName,
@@ -170,11 +170,14 @@ func connectAndRun(ctx context.Context, wsURL string, creds GatewayCredentials, 
 		"caps":              []string{"system"},
 		"commands":          NodeHostCommands,
 	}
-	if creds.Token != "" {
-		connectFrame["token"] = creds.Token
-	}
 	if creds.Password != "" {
-		connectFrame["password"] = creds.Password
+		connectParams["password"] = creds.Password
+	}
+	connectFrame := map[string]any{
+		"type":   "req",
+		"id":     "connect-1",
+		"method": "connect",
+		"params": connectParams,
 	}
 	if err := client.SendJSON(connectFrame); err != nil {
 		return fmt.Errorf("send connect: %w", err)
